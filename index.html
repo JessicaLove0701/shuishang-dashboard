@@ -1251,7 +1251,18 @@ const CLOUD_CFG = {
 };
 let cloud = null;
 let cloudReady = false;
+let localMode = false;      // 无 WorkBuddy SDK（如 GitHub Pages）时的本机存储降级
 let syncTimer = null;
+
+/* ---------- 本机存储（localMode）---------- */
+const LS_TBL = t => 'wb_local_' + t;
+function lsRows(table){
+  try{ return JSON.parse(localStorage.getItem(LS_TBL(table)) || '[]'); }
+  catch(e){ return []; }
+}
+function lsWrite(table, rows){
+  try{ localStorage.setItem(LS_TBL(table), JSON.stringify(rows)); }catch(e){}
+}
 
 function setSync(state, text){
   const dot = $('#syncDot'), txt = $('#syncText');
@@ -1264,9 +1275,22 @@ function uuid(){
   return 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2,10);
 }
 
+/* 只有 WorkBuddy 托管域名才启用云端；GitHub Pages / 本地预览一律走本机存储 */
+const USE_CLOUD = /(^|\.)workbuddy\.(host|cn)$/.test(location.hostname || '');
+
 async function initCloud(){
+  if(!USE_CLOUD){
+    localMode = true;
+    setSync('local','本机存储');
+    return false;
+  }
   try{
-    if(!window.WorkBuddyCloud){ setSync('off','SDK 未加载'); return false; }
+    if(!window.WorkBuddyCloud){
+      // 非 WorkBuddy 托管（如 GitHub Pages）：降级为本机存储，功能可用但不跨设备同步
+      localMode = true;
+      setSync('local','本机存储');
+      return false;
+    }
     cloud = window.WorkBuddyCloud.createWorkBuddyCloud(CLOUD_CFG);
     // 探活
     const { error } = await cloud.database.from('wb_settings').select('skey').limit(1);
@@ -1284,6 +1308,11 @@ async function initCloud(){
 
 /* 通用：拉全量未删除行 */
 async function fetchAll(table, orderCol){
+  if(localMode){
+    let rows = lsRows(table).filter(r=>!r.deleted);
+    if(orderCol) rows.sort((a,b)=> (a[orderCol]>b[orderCol]?1:(a[orderCol]<b[orderCol]?-1:0)));
+    return rows;
+  }
   const q = cloud.database.from(table).select('*').eq('deleted', false);
   const { data, error } = orderCol ? await q.order(orderCol, {ascending:true}) : await q;
   if(error) throw error;
@@ -1292,6 +1321,14 @@ async function fetchAll(table, orderCol){
 
 /* 通用：按 uid upsert */
 async function upsertRow(table, row){
+  if(localMode){
+    const rows = lsRows(table);
+    const i = rows.findIndex(r=>r.uid===row.uid);
+    if(i>=0) rows[i] = Object.assign({}, rows[i], row);
+    else rows.push(row);
+    lsWrite(table, rows);
+    return [row];
+  }
   const { data, error } = await cloud.database
     .from(table)
     .upsert(row, { onConflict:'uid' })
@@ -1302,6 +1339,11 @@ async function upsertRow(table, row){
 
 /* 通用：软删除 */
 async function softDelete(table, uid){
+  if(localMode){
+    const rows = lsRows(table).map(r=> r.uid===uid ? Object.assign({}, r, {deleted:true, updated_at:new Date().toISOString()}) : r);
+    lsWrite(table, rows);
+    return [];
+  }
   const { data, error } = await cloud.database
     .from(table)
     .update({ deleted:true, updated_at:new Date().toISOString() })
@@ -1313,6 +1355,7 @@ async function softDelete(table, uid){
 
 /* 全局设置（键值） */
 async function saveSetting(k, v){
+  if(localMode){ try{ localStorage.setItem('wb_set_'+k, String(v)); }catch(e){} return; }
   if(!cloudReady || !cloud) return;
   try{
     await cloud.database.from('wb_settings').upsert(
@@ -1322,6 +1365,13 @@ async function saveSetting(k, v){
   }catch(e){ console.warn('[settings] save failed', e); }
 }
 async function loadSettings(){
+  if(localMode){
+    try{
+      const v = localStorage.getItem('wb_set_globalK');
+      if(v){ globalK = v; const el=$('#globalK'); if(el) el.value = v; }
+    }catch(e){}
+    return;
+  }
   if(!cloudReady || !cloud) return;
   try{
     const { data } = await cloud.database.from('wb_settings').select('*');
@@ -1986,7 +2036,7 @@ function batchToRow(b){
 let batchesBooted = false;
 let lastBatchSig = '';
 async function loadBatchesCloud(){
-  if(!cloudReady) return;
+  if(!cloudReady && !localMode) return;
   try{
     const rows = await fetchAll('wb_batches', 'bdate');
     const next = rows.map(rowToBatch);
@@ -2014,7 +2064,7 @@ function saveBatchDebounced(uid){
 }
 async function saveBatchNow(uid){
   const b = batches.find(x=>x.uid===uid);
-  if(!b || !cloudReady) return;
+  if(!b || (!cloudReady && !localMode)) return;
   setSync('syncing','保存中…');
   try{
     await upsertRow('wb_batches', batchToRow(b));
@@ -2250,7 +2300,7 @@ function bindBatchEvents(){
   tbl.querySelectorAll('[data-del]').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.del;
-      if(!confirm('确定删除该批次？（采购与销售两行会一起删除，云端同步删除）')) return;
+      if(!confirm('确定删除该批次？（采购与销售两行会一起删除）')) return;
       batches = batches.filter(x=>x.uid!==id);
       renderBatch();
       try{
@@ -2394,7 +2444,7 @@ function reqToRow(r){
 
 let lastReqSig = '';
 async function loadReqsCloud(){
-  if(!cloudReady) return;
+  if(!cloudReady && !localMode) return;
   try{
     const rows = await fetchAll('wb_requirements', 'req_date');
     const next = rows.map(rowToReq);
@@ -2501,7 +2551,7 @@ function renderReq(){
     btn.onclick = async e=>{
       e.stopPropagation();
       const uid = btn.dataset.rm;
-      if(!confirm('删除这条需求？（云端同步删除）')) return;
+      if(!confirm('删除这条需求？')) return;
       reqs = reqs.filter(r=>r.uid!==uid);
       renderReq();
       try{ await softDelete('wb_requirements', uid); toast('已删除'); }
@@ -2528,7 +2578,7 @@ function renderReq(){
     <span style="color:var(--line-strong)">|</span>
     <span>开发中 <b style="color:#d9822b">${reqs.filter(r=>r.status==='开发中').length}</b></span>
     <span style="color:var(--line-strong)">|</span>
-    <span style="color:var(--ink-3)">数据存云端，多端实时同步</span>`;
+    <span style="color:var(--ink-3)">${localMode ? '数据存本机浏览器，不跨设备同步' : '数据存云端，多端实时同步'}</span>`;
 }
 
 function openReqModal(uid){
@@ -2662,19 +2712,19 @@ function bindGlobal(){
     }
   };
   $('#btnSaveAll').onclick = async ()=>{
-    if(!cloudReady){ toast('云端未连接'); return; }
+    if(!cloudReady && !localMode){ toast('云端未连接'); return; }
     setSync('syncing','保存中…');
     try{
       for(const b of batches){ await upsertRow('wb_batches', batchToRow(b)); }
       setSync('on','已同步');
-      toast('已全部保存到云端');
+      toast(localMode ? '已全部保存到本机浏览器' : '已全部保存到云端');
     }catch(e){
       setSync('off','保存失败');
       toast('保存失败：' + (e.message||e));
     }
   };
   $('#btnResetBatch').onclick = ()=>{
-    if(!confirm('仅清空本机缓存并重新从云端加载，不会删除云端数据。继续？')) return;
+    if(!confirm(localMode ? '重新加载本机数据？' : '仅清空本机缓存并重新从云端加载，不会删除云端数据。继续？')) return;
     batches = []; curMonth='9月'; renderMonthSeg(); renderBatch(); loadBatchesCloud(); toast('已重新加载');
   };
 }
@@ -2693,19 +2743,24 @@ async function boot(){
   loadData();
 
   const ok = await initCloud();
-  if(ok){
+  if(ok || localMode){
     await loadSettings();
     await loadBatchesCloud();
     await loadReqsCloud();
-    // 多端同步：定时拉取（正在输入时不打断）
-    setInterval(async ()=>{
-      if(!cloudReady) return;
-      const ae = document.activeElement;
-      if(ae && ['INPUT','TEXTAREA','SELECT'].includes(ae.tagName)) return;
-      if($('#reqModal').classList.contains('show')) return;
-      await loadBatchesCloud();
-      await loadReqsCloud();
-    }, 20000);
+    if(ok){
+      // 多端同步：定时拉取（正在输入时不打断）
+      setInterval(async ()=>{
+        if(!cloudReady) return;
+        const ae = document.activeElement;
+        if(ae && ['INPUT','TEXTAREA','SELECT'].includes(ae.tagName)) return;
+        if($('#reqModal').classList.contains('show')) return;
+        await loadBatchesCloud();
+        await loadReqsCloud();
+      }, 20000);
+    }else{
+      // 本机模式：仅提示一次，不阻塞功能
+      setTimeout(()=>toast('本机存储模式：数据只保存在当前浏览器，不跨设备同步'), 800);
+    }
   }else{
     $('#batchWrap').innerHTML = `<div class="empty"><div class="em-ico">⚠</div>云端未连接，数据无法读写<br><span style="font-size:12px">请检查网络后刷新</span></div>`;
   }
