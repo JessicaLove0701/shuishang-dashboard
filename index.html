@@ -678,31 +678,7 @@
         </div>
       </section>
 
-      <!-- 应急采购批次 -->
-      <section class="panel" data-panel="batch">
-        <div class="card">
-          <div class="card-hd">
-            <h3>应急采购批次明细</h3>
-            <div class="spacer"></div>
-            <div class="seg" id="monthSeg"></div>
-            <div class="field" style="margin-left:6px">国家转换系数
-              <input type="text" id="globalK" class="w110" value="1.06">
-            </div>
-          </div>
-          <div class="toolbar">
-            <button class="btn primary sm" id="btnAddBatch">+ 新增批次</button>
-            <button class="btn sm" id="btnSaveAll">保存</button>
-            <button class="btn sm" id="btnResetBatch">重置</button>
-            <div class="spacer" style="margin-left:auto"></div>
-            <span style="font-size:12px;color:var(--ink-3)">支持公式，如 <code style="background:#eef3f9;padding:1px 5px;border-radius:4px">-150+193+435+32</code></span>
-          </div>
-          <div class="card-bd flush">
-            <div class="tbl-wrap" id="batchWrap" style="max-height:calc(100vh - 380px)"></div>
-          </div>
-          <div class="card-bd" id="summaryWrap" style="border-top:1px solid var(--line);background:#fbfdff"></div>
-          <div class="tip-row" id="batchTip"></div>
-        </div>
-      </section>
+      <!-- 应急采购批次（模块已下线） -->
 
       <!-- 需求反馈 -->
       <section class="panel" data-panel="req">
@@ -865,7 +841,6 @@
           <label>所属模块</label>
           <select id="fModule">
             <option>网价查询</option>
-            <option>应急采购批次</option>
             <option>需求反馈</option>
             <option>工作台整体</option>
             <option>数据同步</option>
@@ -1053,7 +1028,6 @@ const NAV = [
   { group:'功能', items:[
     {key:'home',  ico:'水', label:'工作台首页'},
     {key:'query', ico:'⛽', label:'网价查询'},
-    {key:'batch', ico:'⇄', label:'应急采购批次'},
     {key:'oil',   ico:'🌐', label:'国际油价'},
     {key:'ndrc',  ico:'🏛', label:'各省发改委价格'},
     {key:'req',   ico:'✎', label:'需求反馈'},
@@ -1063,18 +1037,17 @@ const NAV = [
 const TABS = [
   {key:'home',  label:'工作台首页', closable:false},
   {key:'query', label:'网价查询', closable:true},
-  {key:'batch', label:'应急采购批次', closable:true},
   {key:'oil',   label:'国际油价', closable:true},
   {key:'ndrc',  label:'各省发改委价格', closable:true},
   {key:'req',   label:'需求反馈', closable:true},
 ];
 let activeTab = 'home';
-let openTabs = ['home','query','batch'];
+let openTabs = ['home','query'];
 let openSoonTab = null;
 
 // 所有功能都支持置顶；从 NAV 动态派生，后续新增功能自动带星标
 const PINNABLE = NAV.flatMap(g=>g.items.map(it=>it.key));
-const TAB_ICO = {query:'⛽', batch:'⇄', oil:'🌐', ndrc:'🏛', req:'✎', soon:'◈'};
+const TAB_ICO = {query:'⛽', oil:'🌐', ndrc:'🏛', req:'✎', soon:'◈'};
 let pinnedKeys = JSON.parse(localStorage.getItem('wb_pinned')||'[]');
 let recentKeys = JSON.parse(localStorage.getItem('wb_recent')||'[]');
 
@@ -1165,7 +1138,6 @@ function openTab(key){
               : (TABS.find(t=>t.key===key)?.label || key);
   $('#crumb').innerHTML = `工作台 / <b>${esc(label)}</b>`;
   if(key==='query') renderQuery();
-  if(key==='batch') renderBatch();
   if(key==='oil') renderOil();
   if(key==='ndrc') renderNdrc();
   if(key==='req') renderReq();
@@ -1216,7 +1188,6 @@ function closeTab(key){
     $$('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===activeTab));
     if(activeTab==='home') renderHome();
     if(activeTab==='query') renderQuery();
-    if(activeTab==='batch') renderBatch();
   }
   renderTabs(); renderNav();
 }
@@ -1364,32 +1335,13 @@ async function saveSetting(k, v){
     );
   }catch(e){ console.warn('[settings] save failed', e); }
 }
-async function loadSettings(){
-  if(localMode){
-    try{
-      const v = localStorage.getItem('wb_set_globalK');
-      if(v){ globalK = v; const el=$('#globalK'); if(el) el.value = v; }
-    }catch(e){}
-    return;
-  }
-  if(!cloudReady || !cloud) return;
-  try{
-    const { data } = await cloud.database.from('wb_settings').select('*');
-    (data||[]).forEach(r=>{
-      if(r.skey==='globalK' && r.svalue){
-        globalK = r.svalue;
-        const el = $('#globalK'); if(el) el.value = r.svalue;
-      }
-    });
-  }catch(e){ console.warn('[settings] load failed', e); }
-}
+/* loadSettings 原用于读取批次模块的全局转换系数，随模块下线一并移除 */
 
 /* ============================================================
    5. 首页
    ============================================================ */
 const MODULES = [
   {key:'query', ico:'⛽', title:'网价查询', desc:'16 城中石油柴油网价 · 双站对照', live:true},
-  {key:'batch', ico:'⇄', title:'应急采购批次', desc:'采销差价核算 · 合同对比', live:true},
   {key:'oil',   ico:'🌐', title:'国际油价', desc:'WTI / 布伦特 · 近3个月日度 + 未来1周预测', live:true},
   {key:'ndrc',  ico:'🏛', title:'各省发改委价格', desc:'各省柴油批发/零售限价 · 近一年', live:true},
   {key:'req',   ico:'✎', title:'需求反馈', desc:'开发想法记录 · 需求台账', live:true},
@@ -1991,430 +1943,8 @@ function exportCsv(){
 }
 
 /* ============================================================
-   7. 应急采购批次
+   7. 应急采购批次 —— 模块已下线（2026-11-19 移除）
    ============================================================ */
-const MONTHS = ['9月','10月','11月','12月','1月','2月'];
-const LS_KEY = 'diesel_batches_v4';
-let curMonth = '9月';
-let globalK = '1.06';
-
-/* 月份 → 默认日期 */
-const MONTH_START = {'9月':'2026-09-01','10月':'2026-10-01','11月':'2026-11-01',
-                     '12月':'2026-12-01','1月':'2027-01-01','2月':'2027-02-01'};
-
-const SEED = [{
-  uid:'seed-hsqt-0918', month:'9月', date:'2026-09-18', name:'三航局二公司横沙浅滩项目',
-  basePrice:'9660', sellSpread:'-150+193+435+32',
-  actualBuyPrice:'10387.50', contractBuyPrice:'10239.60', actualSellPrice:'10749.60', qty:'100'
-}];
-
-let batches = [];
-let sortState = { col:'date', dir:'asc' };
-
-/* 云端行 ↔ 前端对象 */
-function rowToBatch(r){
-  return {
-    uid: r.uid, month: r.month || '9月', date: r.bdate || '',
-    name: r.name || '', basePrice: r.base_price || '',
-    buySpread: (r.buy_spread===null||r.buy_spread===undefined) ? '0' : r.buy_spread,
-    sellSpread: r.sell_spread || '', actualBuyPrice: r.actual_buy_price || '',
-    contractBuyPrice: r.contract_buy_price || '', actualSellPrice: r.actual_sell_price || '',
-    qty: r.qty || ''
-  };
-}
-function batchToRow(b){
-  return {
-    uid: b.uid, month: b.month, bdate: b.date || '',
-    name: b.name || '', base_price: b.basePrice || '',
-    sell_spread: b.sellSpread || '', actual_buy_price: b.actualBuyPrice || '',
-    contract_buy_price: b.contractBuyPrice || '', actual_sell_price: b.actualSellPrice || '',
-    qty: b.qty || '',
-    deleted: false, updated_at: new Date().toISOString()
-  };
-}
-
-let batchesBooted = false;
-let lastBatchSig = '';
-async function loadBatchesCloud(){
-  if(!cloudReady && !localMode) return;
-  try{
-    const rows = await fetchAll('wb_batches', 'bdate');
-    const next = rows.map(rowToBatch);
-    if(!next.length && !batchesBooted){
-      for(const s of SEED) await upsertRow('wb_batches', batchToRow(s));
-      batches = JSON.parse(JSON.stringify(SEED));
-    }else{
-      batches = next;
-    }
-    batchesBooted = true;
-    const sig = JSON.stringify(batches);
-    if(sig === lastBatchSig) return;      // 无变化不重绘，避免闪烁
-    lastBatchSig = sig;
-    renderMonthSeg(); renderBatch();
-  }catch(e){
-    toast('批次读取失败：' + (e.message||e));
-  }
-}
-
-/* 单条保存（输入时防抖） */
-const saveTimers = {};
-function saveBatchDebounced(uid){
-  clearTimeout(saveTimers[uid]);
-  saveTimers[uid] = setTimeout(()=>saveBatchNow(uid), 600);
-}
-async function saveBatchNow(uid){
-  const b = batches.find(x=>x.uid===uid);
-  if(!b || (!cloudReady && !localMode)) return;
-  setSync('syncing','保存中…');
-  try{
-    await upsertRow('wb_batches', batchToRow(b));
-    setSync('on','已同步');
-  }catch(e){
-    setSync('off','保存失败');
-    toast('保存失败：' + (e.message||e));
-  }
-}
-
-function renderMonthSeg(){
-  const seg=$('#monthSeg');
-  seg.innerHTML = MONTHS.map(m=>`<button class="${m===curMonth?'on':''}" data-m="${m}">${m}</button>`).join('');
-  seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{ curMonth=b.dataset.m; renderMonthSeg(); renderBatch(); });
-}
-
-function calcRow(b){
-  const baseVal = getVal(b.basePrice);
-  const k = getVal(globalK);
-  const conv = baseVal * k;                       // 网站基准价（含转换系数）
-
-  // 采购：实际单价手工输入；升贴水（采购）= 实际单价 − 网站基准价（自动）
-  const buyRaw = String(b.actualBuyPrice==='' || b.actualBuyPrice===undefined ? '' : b.actualBuyPrice).trim();
-  const buy = buyRaw === '' ? 0 : getVal(buyRaw);
-  const buySpread = buy - conv;                   // 采购升贴水（自动）
-
-  // 采购合同单价：手工输入
-  const cbRaw = String(b.contractBuyPrice==='' || b.contractBuyPrice===undefined ? '' : b.contractBuyPrice).trim();
-  const contractBuy = cbRaw === '' ? 0 : getVal(cbRaw);
-
-  // 销售：升贴水手工输入；实际单价 = 基准 + 升贴水（核算价）；合同单价 = 实际单价（自动）
-  const sellSpread = getVal(b.sellSpread);
-  const sell = conv + sellSpread;                 // 销售实际单价（核算价）
-  const contractSell = sell;                      // 销售合同单价 = 销售实际单价
-
-  const qty = getVal(b.qty);
-
-  // 签单数量 = 实际供油数量 + 多签数量；多签数量 = 实际供油数量 × (实际采购单价 − 合同采购单价) / 实际采购单价
-  const buySafe = buy !== 0 ? buy : 1;
-  const signQty = qty + qty * (buy - contractBuy) / buySafe;
-
-  const actualDiff   = sell - buy;
-  const contractDiff = contractSell - contractBuy;
-  const buyPriceDiff  = buy - contractBuy;
-  const sellPriceDiff = sell - contractSell;      // = 0
-
-  return {conv, buySpread, sellSpread, contractBuy, contractSell,
-          actualDiff, contractDiff, buyPriceDiff, sellPriceDiff, signQty, qty, buy, sell};
-}
-
-function renderBatch(){
-  const wrap=$('#batchWrap');
-  if(!wrap) return;
-
-  const list = batches.filter(b=>b.month===curMonth);
-  if(!list.length){
-    wrap.innerHTML = `<div class="empty"><div class="em-ico">📋</div>${esc(curMonth)}暂无交易批次，点击左上角「新增批次」开始</div>`;
-    $('#summaryWrap').innerHTML = '';
-    $('#batchTip').innerHTML = `<span>当前月份无数据</span>`;
-    return;
-  }
-
-  // 列定义（sortable = 表头可点击排序）
-  const cols = [
-    {t:'日期', w:120, k:'date', sortable:1},
-    {t:'批次名称', w:170, k:'name', sortable:1},
-    {t:'类型', w:60, k:'type', sortable:1},
-    {t:'网站基准价', w:120, k:'conv', sortable:1},
-    {t:'升贴水', w:116, k:'spread', sortable:1},
-    {t:'实际单价', w:100, k:'price', sortable:1},
-    {t:'合同单价', w:100, k:'cprice', sortable:1},
-    {t:'实际供油数量', w:96, k:'qty', sortable:1},
-    {t:'签单数量', w:96, k:'signqty', sortable:1},
-    {t:'实际金额', w:104, k:'amount', sortable:1},
-    {t:'合同金额', w:104, k:'camount', sortable:1},
-    {t:'金额差异', w:100, k:'damt', sortable:1},
-    {t:'', w:40, noresize:1},
-  ];
-
-  const sorted = list.slice().sort((a,b)=>{
-    const va = sortVal(a, sortState.col), vb = sortVal(b, sortState.col);
-    let r;
-    if(typeof va==='number' && typeof vb==='number') r = va-vb;
-    else r = String(va).localeCompare(String(vb),'zh-CN');
-    return sortState.dir==='asc' ? r : -r;
-  });
-
-  let thead = `<tr>${cols.map(c=>{
-    const isSorted = sortState.col===c.k;
-    const arrow = isSorted ? (sortState.dir==='asc'?'▲':'▼') : '▲';
-    return `<th style="width:${c.w}px" class="${c.sortable?'sortable':''} ${isSorted?'sorted':''}"`
-      + `${c.sortable?` data-sort="${c.k}"`:''}${c.noresize?' data-noresize="1"':''}>`
-      + `${esc(c.t)}${c.sortable?`<span class="sort-ar">${arrow}</span>`:''}</th>`;
-  }).join('')}</tr>`;
-
-  let tbody = '';
-  sorted.forEach(b=>{
-    const r = calcRow(b);
-    const qty = getVal(b.qty);
-    const cls = v => v>0.005?'pos':(v<-0.005?'neg':'');
-    const bDiff = (r.buy - r.contractBuy) * qty;
-    const sDiff = (r.sell - r.contractSell) * qty;
-    const dateTxt = (b.date||'—').replace(/-/g,'/');
-    const k = getVal(globalK);
-    // 采购行：基准价可输入，下方显示换算值
-    const baseCellBuy = `<td class="base-cell">
-      <input class="f-base" value="${esc(b.basePrice)}" placeholder="基准价">
-      <div class="base-hint">×${k} = ${fmt(r.conv)}</div></td>`;
-    // 销售行：只读展示换算后的基准价
-    const baseCellSell = `<td class="calc c-conv"><div style="font-weight:800">${fmt(r.conv)}</div>
-      <div style="font-weight:500;font-size:10.5px;color:var(--ink-3)">原价 ${esc(b.basePrice||'空')}</div></td>`;
-
-    tbody += `<tr class="row-buy" data-uid="${b.uid}" data-kind="buy">
-      <td class="date rowtag"><input type="date" class="f-date" value="${esc(b.date||'')}"></td>
-      <td class="name"><input class="f-name" value="${esc(b.name)}"></td>
-      <td><span class="type-tag type-buy">采购</span></td>
-      ${baseCellBuy}
-      <td class="calc c-bspread" title="采购升贴水 = 实际单价 − 网站基准价（自动）">${fmt(r.buySpread)}</td>
-      <td><input class="f-buy" value="${esc(b.actualBuyPrice)}" placeholder="实际采购单价"></td>
-      <td><input class="f-contractbuy" value="${esc(b.contractBuyPrice)}" placeholder="合同采购单价"></td>
-      <td><input class="f-qty" value="${esc(b.qty)}"></td>
-      <td class="calc c-signqty" title="签单数量（自动）= 实际供油数量 + 多签数量">${fmt(r.signQty)}</td>
-      <td class="calc c-bamt">${fmt(r.buy*qty)}</td>
-      <td class="calc c-cbamt">${fmt(r.contractBuy*qty)}</td>
-      <td class="calc c-bdiff ${cls(bDiff)}">${fmt(bDiff)}</td>
-      <td rowspan="2"><button class="del-btn" data-del="${b.uid}" title="删除">×</button></td>
-    </tr>
-    <tr class="row-sell" data-uid="${b.uid}" data-kind="sell">
-      <td class="date rowtag"><span class="date-txt">${dateTxt}</span></td>
-      <td class="name"><input class="f-name2" value="${esc(b.name)}"></td>
-      <td><span class="type-tag type-sell">销售</span></td>
-      ${baseCellSell}
-      <td><input class="f-spread" value="${esc(b.sellSpread)}" title="销售升贴水（手工），核算价 = 基准 + 升贴水"></td>
-      <td class="calc c-sprice" title="销售实际单价 = 核算价 = 基准 + 升贴水（自动）">${fmt(r.sell)}</td>
-      <td class="calc c-csell" title="销售合同单价 = 销售实际单价（自动）">${fmt(r.contractSell)}</td>
-      <td><input class="f-qty2" value="${esc(b.qty)}"></td>
-      <td class="calc c-signqty" title="签单数量（自动，与采购一致）">${fmt(r.signQty)}</td>
-      <td class="calc c-samt">${fmt(r.sell*qty)}</td>
-      <td class="calc c-csamt">${fmt(r.contractSell*qty)}</td>
-      <td class="calc c-sdiff ${cls(sDiff)}">${fmt(sDiff)}</td>
-    </tr>`;
-  });
-
-  wrap.innerHTML = `<table class="edit-tbl" id="bTable"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
-  makeResizable($('#bTable'), 'colw_batch_v4');
-  bindBatchEvents();
-  renderSummary(sorted);
-  updateBatchTip(list);
-}
-
-/* 排序：按列取值（批次级） */
-function sortVal(b, col){
-  const r = calcRow(b);
-  const qty = getVal(b.qty);
-  switch(col){
-    case 'name':   return b.name || '';
-    case 'type':   return 0;
-    case 'conv':   return r.conv;
-    case 'spread': return r.buySpread;
-    case 'price':  return r.buy;
-    case 'qty':    return qty;
-    case 'signqty':return r.signQty;
-    case 'amount': return r.buy*qty;
-    case 'cprice': return r.contractBuy;
-    case 'camount':return r.contractBuy*qty;
-    case 'damt':   return (r.buy-r.contractBuy)*qty;
-    default:       return b.date || '';
-  }
-}
-
-function bindBatchEvents(){
-  const tbl=$('#bTable');
-  tbl.querySelectorAll('tbody tr').forEach(tr=>{
-    const id = tr.dataset.uid;
-    const b = batches.find(x=>x.uid===id);
-    const isBuy = tr.dataset.kind==='buy';
-
-    const bind = (sel, key, after)=>{
-      const el = tr.querySelector(sel);
-      if(!el) return;
-      el.oninput = ()=>{
-        b[key] = el.value;
-        if(after) after(el.value);
-        refreshBatch(id);
-        saveBatchDebounced(id);
-      };
-    };
-
-    if(isBuy){
-      bind('.f-name','name');
-      bind('.f-name2','name');
-      bind('.f-base','basePrice');
-      bind('.f-buy','actualBuyPrice');
-      bind('.f-contractbuy','contractBuyPrice');
-      bind('.f-qty','qty', v=>{
-        const other = tbl.querySelector(`.row-sell[data-uid="${id}"] .f-qty2`);
-        if(other && other.value!==v) other.value = v;
-      });
-      const dt = tr.querySelector('.f-date');
-      if(dt){
-        dt.onchange = ()=>{
-          b.date = dt.value;
-          const mo = monthOf(dt.value);
-          if(mo && mo!==b.month) b.month = mo;
-          saveBatchNow(id);
-          if(b.month!==curMonth){ renderBatch(); toast('已移动到 '+b.month); }
-          else {
-            const mirror = tbl.querySelector(`.row-sell[data-uid="${id}"] .date`);
-            if(mirror) mirror.textContent = dt.value || '—';
-          }
-        };
-      }
-    }else{
-      bind('.f-name2','name');
-      bind('.f-spread','sellSpread');
-      bind('.f-qty2','qty', v=>{
-        const other = tbl.querySelector(`.row-buy[data-uid="${id}"] .f-qty`);
-        if(other && other.value!==v) other.value = v;
-      });
-    }
-  });
-
-  // 表头排序
-  tbl.querySelectorAll('th[data-sort]').forEach(th=>{
-    th.onclick = ()=>{
-      const k = th.dataset.sort;
-      if(sortState.col===k){ sortState.dir = sortState.dir==='asc'?'desc':'asc'; }
-      else { sortState.col = k; sortState.dir = 'asc'; }
-      renderBatch();
-    };
-  });
-
-  tbl.querySelectorAll('[data-del]').forEach(btn=>{
-    btn.onclick = async ()=>{
-      const id = btn.dataset.del;
-      if(!confirm('确定删除该批次？（采购与销售两行会一起删除）')) return;
-      batches = batches.filter(x=>x.uid!==id);
-      renderBatch();
-      try{
-        await softDelete('wb_batches', id);
-        toast('已删除并同步');
-      }catch(e){
-        toast('删除同步失败：' + (e.message||e));
-      }
-    };
-  });
-}
-
-/* 输入后刷新该批次的采购行 + 销售行 + 汇总 */
-function refreshBatch(id){
-  const b = batches.find(x=>x.uid===id);
-  if(!b) return;
-  const r = calcRow(b);
-  const qty = getVal(b.qty);
-  const tbl = $('#bTable');
-  const rowBuy = tbl.querySelector(`.row-buy[data-uid="${id}"]`);
-  const rowSell = tbl.querySelector(`.row-sell[data-uid="${id}"]`);
-  const cls = v => v>0.005?'pos':(v<-0.005?'neg':'');
-  const set = (row, sel, val, c)=>{
-    if(!row) return;
-    const el = row.querySelector(sel);
-    if(!el) return;
-    el.textContent = fmt(val);
-    el.classList.remove('pos','neg');
-    if(c) el.classList.add(c);
-  };
-
-  const setBase = row=>{
-    const el = row && row.querySelector('.c-conv');
-    if(!el) return;
-    el.innerHTML = `<div style="font-weight:800">${fmt(r.conv)}</div>`
-      + `<div style="font-weight:500;font-size:10.5px;color:var(--ink-3)">原价 ${esc(b.basePrice)}</div>`;
-  };
-  setBase(rowBuy);
-  setBase(rowSell);
-
-  if(rowBuy){
-    set(rowBuy,'.c-bspread', r.buySpread);
-    set(rowBuy,'.c-bamt', r.buy*qty);
-    set(rowBuy,'.c-cbamt', r.contractBuy*qty);
-    set(rowBuy,'.c-bdiff', (r.buy-r.contractBuy)*qty, cls((r.buy-r.contractBuy)*qty));
-    set(rowBuy,'.c-signqty', r.signQty);
-  }
-  if(rowSell){
-    set(rowSell,'.c-sprice', r.sell);
-    set(rowSell,'.c-csell', r.contractSell);
-    set(rowSell,'.c-samt', r.sell*qty);
-    set(rowSell,'.c-csamt', r.contractSell*qty);
-    set(rowSell,'.c-sdiff', (r.sell-r.contractSell)*qty, cls((r.sell-r.contractSell)*qty));
-    set(rowSell,'.c-signqty', r.signQty);
-    const nameMirror = rowSell.querySelector('.f-name2');
-    if(nameMirror && nameMirror.value!==b.name) nameMirror.value = b.name;
-    const sp = rowSell.querySelector('.f-spread');
-    if(sp) sp.title = b.sellSpread || '';
-  }
-  renderSummary(batches.filter(x=>x.month===curMonth));
-  updateBatchTip(batches.filter(x=>x.month===curMonth));
-}
-
-/* 批次汇总（合同对比 / 签单数量 / 清单调整提示） */
-function renderSummary(list){
-  const box = $('#summaryWrap');
-  if(!box) return;
-  if(!list.length){ box.innerHTML=''; return; }
-  const cls = v => v>0.005?'pos':(v<-0.005?'neg':'');
-  const rows = list.map(b=>{
-    const r = calcRow(b);
-    const need = Math.abs(r.buyPriceDiff)>0.01 || Math.abs(r.sellPriceDiff)>0.01;
-    return `<tr>
-      <td class="s-left">${esc(b.name)}</td>
-      <td class="${cls(r.buySpread)}">${fmt(r.buySpread)}</td>
-      <td>${fmt(r.contractBuy)}</td>
-      <td style="color:#0f8a48">${fmt(r.contractSell)}</td>
-      <td class="${cls(r.actualDiff)}">${fmt(r.actualDiff)}</td>
-      <td class="${cls(r.contractDiff)}">${fmt(r.contractDiff)}</td>
-      <td class="${cls(r.buyPriceDiff)}">${fmt(r.buyPriceDiff)}</td>
-      <td class="${cls(r.sellPriceDiff)}">${fmt(r.sellPriceDiff)}</td>
-      <td>${fmt(r.signQty)}</td>
-      <td style="color:${need?'#f2994a':'#12a150'}">${need?'需调整清单':'无需调整'}</td>
-    </tr>`;
-  }).join('');
-
-  box.innerHTML = `<div class="sum-head">批次汇总 · 合同对比</div>
-  <div style="overflow:auto">
-  <table class="sum-tbl">
-    <thead><tr>
-      <th style="text-align:left">批次</th>
-      <th>实际采购升贴水</th><th>合同采购价</th><th>合同销售价</th>
-      <th>实际采销价差</th><th>合同采销价差</th>
-      <th>采购差额</th><th>销售差额</th><th>签单数量(吨)</th><th>清单调整</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table></div>`;
-}
-
-function updateBatchTip(list){
-  let totalQty=0, adjustCount=0;
-  list.forEach(b=>{
-    const r = calcRow(b);
-    totalQty += r.qty;
-    if(Math.abs(r.buyPriceDiff)>0.01 || Math.abs(r.sellPriceDiff)>0.01) adjustCount++;
-  });
-  const tip=$('#batchTip');
-  tip.innerHTML = `<span>批次 <b>${list.length}</b> 个</span>
-    <span style="color:var(--line-strong)">|</span>
-    <span>合计数量 <b>${fmt0(totalQty)}</b> 吨</span>
-    <span style="color:var(--line-strong)">|</span>
-    <span class="${adjustCount?'warn':'ok'}">${adjustCount? adjustCount+' 个批次需在清单上做调整' : '全部无差异，无需调整清单'}</span>`;
-}
-
 /* ============================================================
    8. 需求反馈（需求开发台账）
    ============================================================ */
@@ -2682,51 +2212,6 @@ function bindGlobal(){
   $('#qCity').oninput = e=>{ qFilter=e.target.value.trim(); renderQuery(); };
   $('#qCols').onchange = e=>{ qCols=e.target.value; renderQuery(); };
   $('#btnExportCsv').onclick = exportCsv;
-
-  // 批次页
-  $('#globalK').value = localStorage.getItem(LS_KEY+'_k') || globalK;
-  globalK = $('#globalK').value;
-  $('#globalK').oninput = e=>{
-    globalK = e.target.value;
-    localStorage.setItem(LS_KEY+'_k', globalK);
-    batches.filter(b=>b.month===curMonth).forEach(b=>refreshBatch(b.uid));
-    saveSetting('globalK', globalK);
-  };
-  $('#btnAddBatch').onclick = async ()=>{
-    const nb = {
-      uid: uuid(), month: curMonth, date: MONTH_START[curMonth] || todayStr(),
-      name:'新交易批次',
-      basePrice:'9325', sellSpread:'0',
-      actualBuyPrice:'9884.5', actualSellPrice:'9884.5', qty:'100'
-    };
-    batches.push(nb);
-    renderBatch();
-    try{
-      setSync('syncing','保存中…');
-      await upsertRow('wb_batches', batchToRow(nb));
-      setSync('on','已同步');
-      toast('已新增批次');
-    }catch(e){
-      setSync('off','保存失败');
-      toast('新增同步失败：' + (e.message||e));
-    }
-  };
-  $('#btnSaveAll').onclick = async ()=>{
-    if(!cloudReady && !localMode){ toast('云端未连接'); return; }
-    setSync('syncing','保存中…');
-    try{
-      for(const b of batches){ await upsertRow('wb_batches', batchToRow(b)); }
-      setSync('on','已同步');
-      toast(localMode ? '已全部保存到本机浏览器' : '已全部保存到云端');
-    }catch(e){
-      setSync('off','保存失败');
-      toast('保存失败：' + (e.message||e));
-    }
-  };
-  $('#btnResetBatch').onclick = ()=>{
-    if(!confirm(localMode ? '重新加载本机数据？' : '仅清空本机缓存并重新从云端加载，不会删除云端数据。继续？')) return;
-    batches = []; curMonth='9月'; renderMonthSeg(); renderBatch(); loadBatchesCloud(); toast('已重新加载');
-  };
 }
 
 function closeSidebar(){
@@ -2738,14 +2223,11 @@ async function boot(){
   renderNav();
   renderTabs();
   renderRecent();
-  renderMonthSeg();
   bindGlobal();
   loadData();
 
   const ok = await initCloud();
   if(ok || localMode){
-    await loadSettings();
-    await loadBatchesCloud();
     await loadReqsCloud();
     if(ok){
       // 多端同步：定时拉取（正在输入时不打断）
@@ -2754,7 +2236,6 @@ async function boot(){
         const ae = document.activeElement;
         if(ae && ['INPUT','TEXTAREA','SELECT'].includes(ae.tagName)) return;
         if($('#reqModal').classList.contains('show')) return;
-        await loadBatchesCloud();
         await loadReqsCloud();
       }, 20000);
     }else{
@@ -2762,11 +2243,12 @@ async function boot(){
       setTimeout(()=>toast('本机存储模式：数据只保存在当前浏览器，不跨设备同步'), 800);
     }
   }else{
-    $('#batchWrap').innerHTML = `<div class="empty"><div class="em-ico">⚠</div>云端未连接，数据无法读写<br><span style="font-size:12px">请检查网络后刷新</span></div>`;
+    const rw = $('#reqWrap');
+    if(rw) rw.innerHTML = `<div class="empty"><div class="em-ico">⚠</div>云端未连接，数据无法读写<br><span style="font-size:12px">请检查网络后刷新</span></div>`;
   }
 
   const h = (location.hash||'').replace('#','');
-  if(['query','batch','req'].includes(h)) setTimeout(()=>openTab(h), 60);
+  if(['query','req'].includes(h)) setTimeout(()=>openTab(h), 60);
 }
 
 document.addEventListener('DOMContentLoaded', boot);
